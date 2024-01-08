@@ -10,40 +10,53 @@ from sklearn.svm import SVC
 from sklearn.naive_bayes import GaussianNB
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.metrics import accuracy_score, classification_report
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.model_selection import cross_val_score, KFold
+
 
 # Load Training.csv and remove last empty column
 data_path = "data\dataset.csv"
-data = pd.read_csv(data_path).dropna(axis = 1)
-
-# Load and display the dataset
-print(data.head())
-
-# Removing the 'Unnamed: 133' column
-# data_cleaned = data.drop(columns=['Unnamed: 133'])
-
-# Removing duplicate rows
-# data_cleaned = data.drop_duplicates()
+raw_data = pd.read_csv(data_path).dropna(axis = 1)
+# display the dataset
+# print(data)
 
 # Check the shape of the data after cleaning
-# data_shape_after_cleaning = data_cleaned.shape
-# print(f"data shape after cleaning: {data_shape_after_cleaning}")
-
-# Display a statistical summary of the dataset
-# statistical_summary = data_cleaned.describe()
-# print(f"statistical summary: {statistical_summary}")
+data_shape_before_cleaning = raw_data.shape
+print(f"data shape before cleaning: {data_shape_before_cleaning}")  
 
 # Check for missing values
-missing_values = data.isnull().sum()
-print(f"Missing values: {missing_values}")
+missing_values = raw_data.isnull().sum()
+# print(f"Missing values: {missing_values}")
 
 # Check for duplicate rows
-duplicate_rows = data.duplicated().sum()
+duplicate_rows = raw_data.duplicated().sum()
 print(f"Duplicate rows: {duplicate_rows}")
+
+# Removing the 'Unnamed: 133' column
+for column in raw_data.columns:
+    if raw_data[column].empty:
+        print(f"The column '{column}' is empty.")
+    else:
+        None
+
+# Removing duplicate rows
+data = raw_data.drop_duplicates()
+# print(f"data cleaned: {data}")
+
+# Check the shape of the data after cleaning
+data_shape_after_cleaning = data.shape
+print(f"data shape after cleaning: {data_shape_after_cleaning}")
+
+# Display a statistical summary of the dataset
+statistical_summary = data.describe()
+# print(f"statistical summary: {statistical_summary}")
 
 # check if the dataset is balanced or not
 no_of_dizz = data["prognosis"].value_counts()
-print(f"Number of diseases: {no_of_dizz}")
+# print(f"Number of diseases: {no_of_dizz}")
 
+# Dataframe with number of diseases and their counts
 tmp_df = pd.DataFrame({
     "Diseases": no_of_dizz.index,
     "Counts" : no_of_dizz.values
@@ -51,88 +64,87 @@ tmp_df = pd.DataFrame({
 
 # plot size
 plt.figure(figsize = (18,8))
-
 # populating variables for bar plot
 sns.barplot(x = "Diseases", y = "Counts", data = tmp_df)
-
+plt.title(f"Bar plot showing counts per diseases")
 # rotate the plot
 plt.xticks(rotation=90)
-
 # print plot
-# plt.show()
+plt.show()
 
-# encode the target variable using Lable encoder
+# encode the target variable using Label encoder
 encoder = LabelEncoder()
-data['prognosis'] = encoder.fit_transform(data["prognosis"])
+en_prog = encoder.fit_transform(data["prognosis"])
 
-# split data for training and testing a model
-X = data.iloc[:,:-1]
-y = data.iloc[:, -1]
+# Separate features and target variable
+X = data.drop('prognosis', axis=1)  # Features (symptoms)
+y = data['prognosis']               # Target variable (prognosis)
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size= 0.2, random_state= 42)
+# Split the dataset into the Training set and Validation set (80/20 split)
+X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.20, random_state=42)
 
 # output Train and Test shapes
 print(f"Train: {X_train.shape}, {y_train.shape}")
-print(f"Test: {X_test.shape}, {y_test.shape}")
+print(f"Test: {X_val.shape}, {y_val.shape}")
 
-# function that returns accuracy score
-def cv_score(estimator, X, y):
-    return accuracy_score(y, estimator.predict(X))
+# a common function for different models to train and test data
+def model_train_test(model, X_train, y_train, X_test, y_test):
+    """
+    Train and test a machine learning model.
 
-# initialize models
-models = {
-    "SVC":SVC(),
-    "Gaussian NB":GaussianNB(),
-    "Random Forest":RandomForestClassifier(random_state=18)
-}
+    Parameters:
+    model: The machine learning model to be trained and tested.
+    X_train: Training data features.
+    y_train: Training data labels.
+    X_test: Testing data features.
+    y_test: Testing data labels.
+    """
 
-# output cross validation of models
-for mdl in models:
-    model = models[mdl]
-    scores = cross_val_score(model, X, y, cv = 10, 
-                             n_jobs = -1, 
-                             scoring = cv_score)
-    print("=="*30)
-    print(mdl)
-    print(f"Scores: {scores}")
-    print(f"Mean Score: {np.mean(scores)}")
+    # Model training
+    model.fit(X_train, y_train)
 
-# train and test data using svm classifier
-svm_model = SVC()
-svm_model.fit(X_train, y_train)
-prediction = svm_model.predict(X_test)
+    # Predictions on the test set
+    pred = model.predict(X_test)
 
-print(f"Accuracy Score on Training data from SVM: {accuracy_score(y_train, svm_model.predict(X_train))*100}")
-print(f"Accuracy Score on Test data from SVM: {accuracy_score(y_test, prediction)*100}")
+     # Evaluate Cross validation 
+    num_folds = 5
+    kf = KFold(n_splits=num_folds, shuffle=True, random_state=42)
+    cross_val_results = cross_val_score(model, X, y, cv=kf)*100
+    print(f'\n{model.__class__.__name__} Cross-Validation Results (Accuracy): {cross_val_results}')
+    print(f'\n{model.__class__.__name__} Cross-Validation Mean Accuracy: {cross_val_results.mean()}')
 
-cf_matrix = confusion_matrix(y_test, prediction)
-plt.figure(figsize=(12,8))
-sns.heatmap(cf_matrix, annot=True)
-plt.title("Confusion Matrix for SVM Classifier on Test Data")
-plt.show()
+    # Accuracy score
+    Accuracy_train = accuracy_score(y_train, model.predict(X_train))*100
+    Accuracy_test = accuracy_score(y_test, pred)*100
+    print(f"\nAccuracy score on train data using {model.__class__.__name__}: {Accuracy_train}")
+    print(f"\nAccuracy score on test data using {model.__class__.__name__}: {Accuracy_test}")
+    
+    # Classification report
+    print(f"\n{model.__class__.__name__} Classification Report:")
+    print(classification_report(y_test, pred, zero_division=1))
 
-# Training and testing Naive Bayes Classifier
-gn_model = GaussianNB()
-gn_model.fit(X_train, y_train)
-prediction = gn_model.predict(X_test)
-print(f"Accuracy of train data using Naive Bayes Classifier: {accuracy_score(y_train, gn_model.predict(X_train))*100}")
-print(f"Accuracy on test data using Naive Bayes Classifier: {accuracy_score(y_test, prediction)*100}")
+    # graphical representation of confusion matrix of different models
+    cf_matrix = confusion_matrix(y_test, pred)
+    plt.figure(figsize=(12,8))
+    sns.heatmap(cf_matrix, annot=True)
+    plt.title(f"{model.__class__.__name__}-Confusion Matrix on Test Data")
+    plt.show()
 
-cf_matrix = confusion_matrix(y_test, prediction)
-plt.figure(figsize=(12,8))
-sns.heatmap(cf_matrix, annot=True)
-plt.title("Confusion Matrix using Naive Bayes Classifier on Test Data")
-plt.show()
+    return model, Accuracy_train, Accuracy_test
 
-# Training and testing using Random Forest Classifier
-rf_model = RandomForestClassifier(random_state=18)
-rf_model.fit(X_train, y_train)
-prediction = rf_model.predict(X_test)
-print(f"Accuracy of train data using Random Forest Classifier: {accuracy_score(y_train, rf_model.predict(X_train))*100}")
-print(f"Accuracy on test data using Random Forest Classifier: {accuracy_score(y_test, prediction)*100}")
- 
-cf_matrix = confusion_matrix(y_test, prediction)
-plt.figure(figsize=(12,8))
-sns.heatmap(cf_matrix, annot=True)
-plt.title("Confusion Matrix using Random Forest Classifier on Test Data")
-plt.show()
+# Creating the Decision Tree classifier
+dt_classifier = DecisionTreeClassifier(max_depth=100, random_state=42)
+model_train_test(dt_classifier, X_train, y_train, X_val, y_val)
+
+# Instantiate the Random Forest Classifier
+rf_classifier = RandomForestClassifier(n_estimators=50, max_depth=10, random_state=42)
+model_train_test(rf_classifier, X_train, y_train, X_val, y_val)
+
+# Instantiate the SVC Classifier
+svm_classifier = SVC(kernel='linear')
+model_train_test(svm_classifier, X_train, y_train, X_val, y_val)
+
+# Instantiate the GaussianNB Classifier
+nb_classifier = GaussianNB()
+model_train_test(nb_classifier, X_train, y_train, X_val, y_val)
+
